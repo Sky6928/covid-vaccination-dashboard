@@ -1,0 +1,6 @@
+streamlit
+pandas
+matplotlib
+fpdf==2.7.5
+prophet
+
