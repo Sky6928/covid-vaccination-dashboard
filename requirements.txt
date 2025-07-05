@@ -2,5 +2,5 @@ streamlit
 pandas
 matplotlib
 fpdf==2.7.5
-prophet
-
+prophet==1.1.5
+pystan==2.19.1.1
