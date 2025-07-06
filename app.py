@@ -89,3 +89,4 @@ if st.button("📎 Сформировать PDF"):
     os.unlink(tmp_path)
 
 st.caption("🧠 Данные: Our World In Data — обновление через Kaggle")
+
