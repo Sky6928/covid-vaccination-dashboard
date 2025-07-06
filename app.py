@@ -1,3 +1,4 @@
+
 import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -6,60 +7,56 @@ from fpdf import FPDF
 import tempfile
 import os
 
-# Настройки
-st.set_page_config(page_title="Вакцинация по COVID-19", layout="wide")
-st.title("🌍 Мировая статистика вакцинации от COVID-19 — LIVE")
+st.set_page_config(page_title="COVID-19 Вакцинация", layout="centered")
+st.title("💉 Вакцинация от COVID-19: Глобальный мониторинг")
 
+# Загрузка данных
 @st.cache_data
 def load_data():
     df = pd.read_csv("country_vaccinations.csv")
-    df["date"] = pd.to_datetime(df["date"])
+    df['date'] = pd.to_datetime(df['date'])
     return df
 
 df = load_data()
 
-# Выбор страны
-countries = sorted(df["country"].unique())
-selected_countries = st.multiselect("Выберите страну", countries, default=["Russia", "United States", "India"])
+# Выбор стран
+countries = df['country'].dropna().unique().tolist()
+selected_countries = st.multiselect("Выберите страны:", countries, default=["Russia", "United States", "India"])
 
-# Метрики
-st.header("📌 Основные метрики")
-for country in selected_countries:
-    country_df = df[df["country"] == country].dropna(subset=["total_vaccinations"])
-    start = country_df["date"].min().strftime('%Y-%m-%d')
-    total = int(country_df["total_vaccinations"].max())
-    avg = int(country_df["daily_vaccinations"].mean())
-    st.metric(label=f"{country}", value=f"{total:,}", delta=f"Старт: {start} | Ср. {avg:,}/день")
+# Фильтрация по странам
+filtered_df = df[df['country'].isin(selected_countries)]
 
-# График
-st.header("📈 График вакцинаций")
-fig, ax = plt.subplots(figsize=(10, 5))
+# Визуализация
+st.subheader("📈 График вакцинации по странам")
 for country in selected_countries:
-    df_c = df[df["country"] == country].dropna(subset=["total_vaccinations"])
-    ax.plot(df_c["date"], df_c["total_vaccinations"], label=country)
-ax.legend()
-ax.grid(True)
+    country_data = filtered_df[filtered_df['country'] == country]
+    plt.plot(country_data['date'], country_data['total_vaccinations'], label=country)
+
+plt.xlabel("Дата")
+plt.ylabel("Всего прививок")
+plt.legend()
+st.pyplot(plt.gcf())
+plt.clf()
+
+# Прогнозирование для одной страны
+st.subheader("🔮 Прогноз вакцинации")
+forecast_country = st.selectbox("Выберите страну для прогноза:", selected_countries)
+
+df_country = df[df['country'] == forecast_country]
+df_country = df_country[['date', 'total_vaccinations']].dropna()
+df_country.columns = ['ds', 'y']
+
+m = Prophet()
+m.fit(df_country)
+future = m.make_future_dataframe(periods=30)
+forecast = m.predict(future)
+
+fig = m.plot(forecast)
 st.pyplot(fig)
 
-# Прогноз (Prophet)
-st.header("🔮 Прогноз на 30 дней")
-if len(selected_countries) == 1:
-    country = selected_countries[0]
-    df_p = df[df["country"] == country].dropna(subset=["daily_vaccinations"])
-    df_p = df_p[["date", "daily_vaccinations"]].rename(columns={"date": "ds", "daily_vaccinations": "y"})
-    if len(df_p) > 10:
-        model = Prophet()
-        model.fit(df_p)
-        future = model.make_future_dataframe(periods=30)
-        forecast = model.predict(future)
-        fig2 = model.plot(forecast)
-        st.pyplot(fig2)
-    else:
-        st.warning("Недостаточно данных для прогноза.")
-else:
-    st.info("Прогноз доступен только при выборе одной страны.")
+# Генерация PDF отчёта
+st.subheader("📄 Генерация отчёта PDF")
 
-# PDF отчёт
 def generate_pdf_report_unicode(countries_selected, total_data, font_path):
     pdf = FPDF()
     pdf.add_page()
@@ -72,18 +69,23 @@ def generate_pdf_report_unicode(countries_selected, total_data, font_path):
         pdf.cell(200, 10, txt=f"{country}: {int(total):,} прививок", ln=1)
     return pdf
 
-st.header("📥 Скачать отчёт в PDF")
-if st.button("📄 Сформировать PDF"):
-    font_path = "DejaVuSans.ttf"  # Убедись, что он в папке
-    report_data = df.groupby("country")["total_vaccinations"].max()
+if st.button("📎 Сформировать PDF"):
+    font_path = "DejaVuSans.ttf"
+    report_data = df.groupby('country')['total_vaccinations'].max()
     pdf = generate_pdf_report_unicode(selected_countries, report_data, font_path)
+
     with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
         pdf.output(tmp.name)
         tmp_path = tmp.name
+
     with open(tmp_path, "rb") as file:
-        st.download_button("📎 Скачать PDF", data=file, file_name="vaccination_report.pdf", mime="application/pdf")
+        st.download_button(
+            label="📥 Скачать PDF",
+            data=file,
+            file_name="vaccination_report.pdf",
+            mime="application/pdf"
+        )
+
     os.unlink(tmp_path)
 
-st.markdown("---")
-st.caption("Источник данных: [Kaggle – COVID-19 Vaccination Progress](https://www.kaggle.com/datasets/gpreda/covid-world-vaccination-progress)")
-
+st.caption("🧠 Данные: Our World In Data — обновление через Kaggle")
